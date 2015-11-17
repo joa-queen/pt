@@ -1,11 +1,12 @@
 var superagent = require('superagent');
-var Movie = require('./movie.jsx');
+var gui = require('nw.gui');
 
 var Movies = React.createClass({
   getInitialState: function() {
     return {
       selected: null,
       movies: null,
+      magnet: null,
     };
   },
   componentDidMount: function() {
@@ -31,6 +32,19 @@ var Movies = React.createClass({
     this.resizeWindow(300, 150);
     this.setState({selected: null});
   },
+  playMovie: function() {
+    var movie = this.state.movies[this.state.selected];
+
+    var playerWindow = gui.Window.open('../player.html?hash=' + movie.torrents[0].hash, {
+      "title": movie.title,
+      "toolbar": false,
+      "frame": false,
+      "width": 800,
+      "height": 500,
+      "position": "center",
+      "show": true
+    });
+  },
   resizeWindow: function(w, h) {
     window.resizeTo(w, h);
   },
@@ -52,23 +66,27 @@ var Movies = React.createClass({
     if (!this.state.movies) {
       Content = <div>Cargando...</div>;
     } else {
-      if (this.state.selected) {
-        var movie = this.state.movies[this.state.selected];
-        Content = <Movie movie={movie} unselectMovie={this.unselectMovie} />;
+      if (!this.state.magnet) {
+        if (this.state.selected) {
+          var movie = this.state.movies[this.state.selected];
+          Content = <Movie movie={movie} unselectMovie={this.unselectMovie} playMovie={this.playMovie} />;
+        } else {
+          var _self = this;
+          Content = (
+            <div>
+              <h2>Movies</h2>
+              <ul>
+                {this.state.movies.map(function(movie, i) {
+                  return (
+                    <li key={i}><a href="#" onClick={_self.selectMovie.bind(_self, i)}>{movie.title}</a></li>
+                  );
+                })}
+              </ul>
+            </div>
+          );
+        }
       } else {
-        var _self = this;
-        Content = (
-          <div>
-            <h2>Movies</h2>
-            <ul>
-              {this.state.movies.map(function(movie, i) {
-                return (
-                  <li key={i}><a href="#" onClick={_self.selectMovie.bind(_self, i)}>{movie.title}</a></li>
-                );
-              })}
-            </ul>
-          </div>
-        );
+        Content = <Streaming magnet={this.state.magnet} />;
       }
     }
     return (
