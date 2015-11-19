@@ -6,11 +6,11 @@ var tray = new gui.Tray({ icon: 'img/tray.png' });
 
 // reusing the custom tray menu (just hiding and showing)
 var customTrayMenu = gui.Window.open('movies.html', {
-  "title": "Search",
+  "title": "Popcorn Time",
   "toolbar": false,
   "frame": false,
   "width": 300,
-  "height": 150,
+  "height": 220,
   "position": "mouse",
   "always-on-top": true,
   "visible-on-all-workspaces": true,

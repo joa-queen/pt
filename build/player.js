@@ -1,17 +1,19 @@
 var peerflix = require('peerflix');
 var url = require('url');
+var wcjs = require('./vendor/wcjs-renderer/index.js');
 var BUFFERING_SIZE = 3 * 1024 * 1024;
 
 var Player = React.createClass({
   displayName: 'Player',
 
-  src: null,
+  player: null,
   getInitialState: function () {
     return {
-      downloaded: 0
+      downloaded: 0,
+      playing: false
     };
   },
-  componentWillMount: function () {
+  componentDidMount: function () {
     var _self = this;
 
     var url_parts = url.parse(window.location.href, true);
@@ -25,16 +27,16 @@ var Player = React.createClass({
 
     setInterval(function () {
       _self.setState({ downloaded: engine.swarm.downloaded });
+      if (_self.state.downloaded > BUFFERING_SIZE && !_self.state.playing) {
+        _self.setState({ playing: true });
+        var player = wcjs.init(document.getElementById("player"));
+        player.play(_self.src);
+      }
     }, 3000);
   },
   render: function () {
     var Content;
-    if (this.state.downloaded > BUFFERING_SIZE) {
-      Content = React.createElement(
-        'video',
-        { ref: 'player', width: '100%', height: '100%', controls: true, preload: 'auto', autoPlay: true, src: this.src }
-      );
-    } else {
+    if (this.state.downloaded <= BUFFERING_SIZE) {
       Content = React.createElement(
         'div',
         null,
@@ -43,7 +45,11 @@ var Player = React.createClass({
         ' / '
       );
     }
-    return Content;
+    return React.createElement(
+      'div',
+      null,
+      Content
+    );
   }
 });
 

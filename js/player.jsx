@@ -1,42 +1,47 @@
 var peerflix = require('peerflix');
 var url = require('url');
+var wcjs = require('./vendor/wcjs-renderer/index.js');
 var BUFFERING_SIZE = 3 * 1024 * 1024;
 
 var Player = React.createClass({
-  src: null,
+  player: null,
   getInitialState: function() {
     return {
-      downloaded: 0
+      downloaded: 0,
+      playing: false
     };
   },
-  componentWillMount: function() {
+  componentDidMount: function() {
     var _self = this;
 
-    var url_parts = url.parse(request.url, true);
-    var hash = url_parts.hash;
-    var magnetLink = 'magnet:?xt=urn:btih:' + hash;
+    var url_parts = url.parse(window.location.href, true);
+    var query = url_parts.query;
+    var magnetLink = 'magnet:?xt=urn:btih:' + query.hash;
     var engine = peerflix(magnetLink);
 
-    engine.server.on('listening', function() {
-      this.src = 'http://localhost:' + engine.server.address().port + '/';
+    engine.server.on('listening', function () {
+      _self.src = 'http://localhost:' + engine.server.address().port + '/';
     });
 
-    setInterval(function() {
-      _self.setState({downloaded: engine.swarm.downloaded});
+    setInterval(function () {
+      _self.setState({ downloaded: engine.swarm.downloaded });
+      if (_self.state.downloaded > BUFFERING_SIZE && !_self.state.playing) {
+        _self.setState({playing: true});
+        var player = wcjs.init(document.getElementById("player"));
+        player.play(_self.src);
+      }
     }, 3000);
   },
   render: function() {
     var Content;
-    if (this.state.downloaded > BUFFERING_SIZE) {
-      Content = (
-        <video ref="player" width="100%" height="100%" controls preload="auto" autoPlay >
-          <source src={this.src} type="video/mp4" />
-        </video>
-      );
-    } else {
+    if (this.state.downloaded <= BUFFERING_SIZE) {
       Content = <div>Buffering: {this.state.downloaded} / </div>;
     }
-    return Content;
+    return (
+      <div>
+        {Content}
+      </div>
+    );
   }
 });
 
