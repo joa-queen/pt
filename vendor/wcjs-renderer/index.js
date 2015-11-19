@@ -173,7 +173,7 @@ module.exports = {
         // Hack for arnold : on Mac use wcjs-prebuilt instead of webchimera.js
         // var wcAddon = require("webchimera.js");
         // ---------------------------------------------------------------------
-        if(process.platform == 'darwin') {
+        if(process.platform == 'darwin' || true) {
           var wcAddon = require("wcjs-prebuilt");
         } else {
           var wcAddon = require("webchimera.js");

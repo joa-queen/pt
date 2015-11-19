@@ -1,5 +1,8 @@
+var _extends = Object.assign || function (target) { for (var i = 1; i < arguments.length; i++) { var source = arguments[i]; for (var key in source) { if (Object.prototype.hasOwnProperty.call(source, key)) { target[key] = source[key]; } } } return target; };
+
 var superagent = require('superagent');
 var gui = require('nw.gui');
+var OS = require('opensubtitles-api');
 
 var Movies = React.createClass({
   displayName: 'Movies',
@@ -26,6 +29,9 @@ var Movies = React.createClass({
     if (!movie.plot) {
       this.loadPlot(index);
     }
+    if (!movie.subtitles) {
+      this.loadSubtitles(index);
+    }
   },
   unselectMovie: function () {
     this.resizeWindow(300, 150);
@@ -38,7 +44,27 @@ var Movies = React.createClass({
     var movies = this.state.movies;
     var movie = movies[index];
     superagent.get('http://www.omdbapi.com/').query({ i: movie.imdb_code }).set('Accept', 'application/json').end((function (err, res) {
-      movie.plot = res.body.Plot;
+      if (res.body) {
+        movie.plot = res.body.Plot;
+        movies[index] = movie;
+        this.setState({ movies: movies });
+      }
+    }).bind(this));
+  },
+  loadSubtitles: function (index) {
+    var movies = this.state.movies;
+    var movie = movies[index];
+
+    var OpenSubtitles = new OS({
+      useragent: 'Popcorn Time v2',
+      username: 'popcorntime2',
+      password: 'popcorntime2'
+    });
+    OpenSubtitles.search({
+      filesize: movie.torrents[0].size_bytes,
+      imdbid: movie.imdb_code
+    }).then((function (subtitles) {
+      movie.subtitles = subtitles;
       movies[index] = movie;
       this.setState({ movies: movies });
     }).bind(this));
@@ -101,7 +127,8 @@ var Movie = React.createClass({
 
   getInitialState: function () {
     return {
-      subtitles: null,
+      scene: 'main',
+      subtitle: null,
       torrent: 0
     };
   },
@@ -119,8 +146,83 @@ var Movie = React.createClass({
       "show_in_taskbar": true
     });
   },
+  qualityScene: function () {
+    this.setState({ scene: 'quality' });
+  },
+  subtitlesScene: function () {
+    this.setState({ scene: 'subtitles' });
+  },
+  backButton: function () {
+    switch (this.state.scene) {
+      case 'quality':
+      case 'subtitles':
+        this.setState({ scene: 'main' });
+        break;
+      default:
+        this.props.unselectMovie();
+    }
+  },
+  selectQuality: function (index, event) {
+    this.setState({ torrent: index, scene: 'main' });
+  },
+  selectSubtitle: function (key, event) {
+    this.setState({ subtitle: key, scene: 'main' });
+  },
+  render: function () {
+    var Scene;
+    var movie = this.props.movie;
+
+    switch (this.state.scene) {
+      case 'quality':
+        Scene = React.createElement(QualityScene, {
+          movie: movie,
+          selectQuality: this.selectQuality });
+        break;
+      case 'subtitles':
+        Scene = React.createElement(SubtitlesScene, {
+          selectSubtitle: this.selectSubtitle,
+          movie: movie });
+        break;
+      default:
+        Scene = React.createElement(MovieMain, _extends({}, this.props, {
+          quality: this.state.torrent,
+          subtitle: this.state.subtitle,
+          qualityScene: this.qualityScene,
+          subtitlesScene: this.subtitlesScene,
+          playMovie: this.playMovie }));
+    }
+
+    var styles = {
+      cover: {
+        width: '100%'
+      }
+    };
+
+    return React.createElement(
+      'div',
+      null,
+      React.createElement(
+        'a',
+        { href: '#', onClick: this.backButton },
+        'Volver'
+      ),
+      React.createElement('img', { src: movie.background_image, style: styles.cover }),
+      React.createElement(
+        'h1',
+        null,
+        movie.title
+      ),
+      Scene
+    );
+  }
+});
+
+var MovieMain = React.createClass({
+  displayName: 'MovieMain',
+
   render: function () {
     var movie = this.props.movie;
+
     var Plot;
     if (!movie.plot) {
       Plot = React.createElement(
@@ -136,28 +238,43 @@ var Movie = React.createClass({
       );
     }
 
-    var styles = {
-      cover: {
-        width: '100%'
+    var Subtitles;
+    if (!movie.subtitles) {
+      Subtitles = React.createElement(
+        'li',
+        null,
+        'Cargando subtítulos'
+      );
+    } else {
+      if (Object.keys(movie.subtitles).length > 0) {
+        if (!this.props.subtitle) {
+          Subtitles = React.createElement(
+            'li',
+            { onClick: this.props.subtitlesScene },
+            'Elegir subtítulo'
+          );
+        } else {
+          Subtitles = React.createElement(
+            'li',
+            { onClick: this.props.subtitlesScene },
+            movie.subtitles[this.props.subtitle].langName
+          );
+        }
+      } else {
+        Subtitles = React.createElement(
+          'li',
+          null,
+          'No hay subtítulos'
+        );
       }
-    };
+    }
+
     return React.createElement(
       'div',
       null,
       React.createElement(
-        'a',
-        { href: '#', onClick: this.props.unselectMovie },
-        'Volver'
-      ),
-      React.createElement('img', { src: movie.background_image, style: styles.cover }),
-      React.createElement(
-        'h1',
-        null,
-        movie.title
-      ),
-      React.createElement(
         'button',
-        { onClick: this.playMovie },
+        { onClick: this.props.playMovie },
         'Reproducir'
       ),
       React.createElement('br', null),
@@ -179,10 +296,50 @@ var Movie = React.createClass({
         null,
         React.createElement(
           'li',
-          null,
-          movie.torrents[this.state.torrent].quality
-        )
+          { onClick: this.props.qualityScene },
+          movie.torrents[this.props.quality].quality
+        ),
+        Subtitles
       )
+    );
+  }
+});
+
+var QualityScene = React.createClass({
+  displayName: 'QualityScene',
+
+  render: function () {
+    var _self = this;
+    return React.createElement(
+      'ul',
+      null,
+      this.props.movie.torrents.map(function (torrent, i) {
+        return React.createElement(
+          'li',
+          { key: i, onClick: _self.props.selectQuality.bind(_self, i) },
+          torrent.quality
+        );
+      })
+    );
+  }
+});
+
+var SubtitlesScene = React.createClass({
+  displayName: 'SubtitlesScene',
+
+  render: function () {
+    var _self = this;
+
+    return React.createElement(
+      'ul',
+      null,
+      Object.keys(this.props.movie.subtitles).map(function (key, i) {
+        return React.createElement(
+          'li',
+          { key: i, onClick: _self.props.selectSubtitle.bind(_self, key) },
+          _self.props.movie.subtitles[key].langName
+        );
+      })
     );
   }
 });

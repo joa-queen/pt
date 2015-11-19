@@ -1,5 +1,6 @@
 var superagent = require('superagent');
 var gui = require('nw.gui');
+var OS = require('opensubtitles-api');
 
 var Movies = React.createClass({
   getInitialState: function() {
@@ -27,6 +28,9 @@ var Movies = React.createClass({
     if (!movie.plot) {
       this.loadPlot(index);
     }
+    if (!movie.subtitles) {
+      this.loadSubtitles(index);
+    }
   },
   unselectMovie: function() {
     this.resizeWindow(300, 150);
@@ -43,10 +47,30 @@ var Movies = React.createClass({
       .query({i: movie.imdb_code})
       .set('Accept', 'application/json')
       .end(function(err, res){
-        movie.plot = res.body.Plot;
-        movies[index] = movie;
-        this.setState({movies: movies});
+        if (res.body) {
+          movie.plot = res.body.Plot;
+          movies[index] = movie;
+          this.setState({movies: movies});
+        }
       }.bind(this));
+  },
+  loadSubtitles: function(index) {
+    var movies = this.state.movies;
+    var movie = movies[index];
+
+    var OpenSubtitles = new OS({
+      useragent:'Popcorn Time v2',
+      username: 'popcorntime2',
+      password: 'popcorntime2',
+    });
+    OpenSubtitles.search({
+      filesize: movie.torrents[0].size_bytes,
+      imdbid: movie.imdb_code
+    }).then(function(subtitles) {
+      movie.subtitles = subtitles;
+      movies[index] = movie;
+      this.setState({movies: movies});
+    }.bind(this));
   },
   render: function() {
     var Content;
@@ -88,8 +112,9 @@ var Movies = React.createClass({
 var Movie = React.createClass({
   getInitialState: function() {
     return {
-      subtitles: null,
-      torrent: 0
+      scene: 'main',
+      subtitle: null,
+      torrent: 0, 
     };
   },
   playMovie: function() {
@@ -106,13 +131,50 @@ var Movie = React.createClass({
       "show_in_taskbar": true
     });
   },
+  qualityScene: function() {
+    this.setState({scene: 'quality'});
+  },
+  subtitlesScene: function() {
+    this.setState({scene: 'subtitles'});
+  },
+  backButton: function() {
+    switch (this.state.scene) {
+      case 'quality':
+      case 'subtitles':
+        this.setState({scene: 'main'});
+        break;
+      default:
+        this.props.unselectMovie();
+    }
+  },
+  selectQuality: function(index, event) {
+    this.setState({torrent: index, scene: 'main'});
+  },
+  selectSubtitle: function(key, event) {
+    this.setState({subtitle: key, scene: 'main'});
+  },
   render: function() {
+    var Scene;
     var movie = this.props.movie;
-    var Plot;
-    if (!movie.plot) {
-      Plot = <div>Cargando plot...</div>;
-    } else {
-      Plot = <div>{movie.plot}</div>
+
+    switch (this.state.scene) {
+      case 'quality':
+        Scene = <QualityScene 
+          movie={movie}
+          selectQuality={this.selectQuality} />;
+        break;
+      case 'subtitles':
+        Scene = <SubtitlesScene
+          selectSubtitle={this.selectSubtitle}
+          movie={movie} />;
+        break;
+      default:
+        Scene = <MovieMain {...this.props} 
+          quality={this.state.torrent}
+          subtitle={this.state.subtitle}
+          qualityScene={this.qualityScene}
+          subtitlesScene={this.subtitlesScene}
+          playMovie={this.playMovie} />;
     }
 
     var styles = {
@@ -120,13 +182,48 @@ var Movie = React.createClass({
         width: '100%'
       }
     };
+
     return (
       <div>
-        <a href="#" onClick={this.props.unselectMovie}>Volver</a>
+        <a href="#" onClick={this.backButton}>Volver</a>
         <img src={movie.background_image} style={styles.cover} />
         <h1>{movie.title}</h1>
 
-        <button onClick={this.playMovie}>Reproducir</button>
+        {Scene}
+      </div>
+    );
+  }
+});
+
+var MovieMain = React.createClass({
+  render: function() {
+    var movie = this.props.movie;
+
+    var Plot;
+    if (!movie.plot) {
+      Plot = <div>Cargando plot...</div>;
+    } else {
+      Plot = <div>{movie.plot}</div>
+    }
+
+    var Subtitles;
+    if (!movie.subtitles) {
+      Subtitles = <li>Cargando subtítulos</li>;
+    } else {
+      if (Object.keys(movie.subtitles).length > 0) {
+        if (!this.props.subtitle) {
+          Subtitles = <li onClick={this.props.subtitlesScene}>Elegir subtítulo</li>;
+        } else {
+          Subtitles = <li onClick={this.props.subtitlesScene}>{movie.subtitles[this.props.subtitle].langName}</li>;
+        }
+      } else {
+        Subtitles = <li>No hay subtítulos</li>;
+      }
+    }
+
+    return (
+      <div>
+        <button onClick={this.props.playMovie}>Reproducir</button>
         <br />
 
         Rating: {movie.rating}<br />
@@ -135,9 +232,41 @@ var Movie = React.createClass({
 
         <br /><br />
         <ul>
-          <li>{movie.torrents[this.state.torrent].quality}</li>
+          <li onClick={this.props.qualityScene}>{movie.torrents[this.props.quality].quality}</li>
+          {Subtitles}
         </ul>
       </div>
+    );
+  }
+});
+
+var QualityScene = React.createClass({
+  render: function() {
+    var _self = this;
+    return (
+      <ul>
+        {this.props.movie.torrents.map(function(torrent, i) {
+          return (
+            <li key={i} onClick={_self.props.selectQuality.bind(_self, i)}>{torrent.quality}</li>
+          );
+        })}
+      </ul>
+    );
+  }
+});
+
+var SubtitlesScene = React.createClass({
+  render: function() {
+    var _self = this;
+
+    return (
+      <ul>
+        {Object.keys(this.props.movie.subtitles).map(function(key, i) {
+          return (
+            <li key={i} onClick={_self.props.selectSubtitle.bind(_self, key)}>{_self.props.movie.subtitles[key].langName}</li>
+          );
+        })}
+      </ul>
     );
   }
 });

@@ -9,6 +9,9 @@
   "dependencies": {
     "babel-preset-react": "^6.1.18",
     "babelify": "^7.2.0",
+    "install": "^0.3.0",
+    "npm": "^3.4.0",
+    "opensubtitles-api": "^2.1.0",
     "peerflix": "^0.32.2",
     "react": "^0.14.2",
     "react-dom": "^0.14.2",
